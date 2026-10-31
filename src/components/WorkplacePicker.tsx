@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { cityName, workplaceName } from "@/lib/constants";
 import type { Workplace } from "@/lib/types";
+import { useL } from "./site/LocaleProvider";
 
 export type Preset = { id: string; name: string; city: string; lat: number; lng: number; lines: string[] };
 type Suggestion = { placeId: string; main: string; secondary: string };
@@ -18,6 +20,8 @@ export default function WorkplacePicker({
   value, onChange, presets, google,
 }: { value: Workplace | null; onChange: (w: Workplace) => void; presets: Preset[]; google: boolean }) {
   const listId = useId();
+  const { L, locale } = useL();
+  const pname = (p: Preset) => workplaceName({ label: p.name, presetId: p.id }, locale);
   const [q, setQ] = useState("");
   const [items, setItems] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -41,13 +45,14 @@ export default function WorkplacePicker({
         setOpen(true);
         setError("");
       } catch (e) {
-        if ((e as Error).name !== "AbortError") setError("地址搜尋暫時無法使用，請改選常見地點");
+        if ((e as Error).name !== "AbortError") setError(L("地址搜尋暫時無法使用，請改選常見地點", "Address search is unavailable right now — pick a common place instead"));
       }
     }, 250);
     return () => {
       clearTimeout(t);
       ctrl.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, google]);
 
   async function pick(s: Suggestion) {
@@ -60,7 +65,7 @@ export default function WorkplacePicker({
       onChange({ label: s.main, lat: d.lat, lng: d.lng, placeId: d.placeId });
       session.current = newSession(); // 一次選取結束，計費 session 重新開始
     } catch {
-      setError("無法取得這個地點的座標，請換一個試試");
+      setError(L("無法取得這個地點的座標，請換一個試試", "Couldn't locate that place — try another"));
     }
   }
 
@@ -68,7 +73,7 @@ export default function WorkplacePicker({
     <div className="wp-picker">
       {google ? (
         <label>
-          工作地（地址或公司名稱）
+          {L("工作地（地址或公司名稱）", "Workplace (address or company)")}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -81,7 +86,7 @@ export default function WorkplacePicker({
               if (e.key === "Enter") (e.preventDefault(), pick(items[active]));
               if (e.key === "Escape") setOpen(false);
             }}
-            placeholder="例如：台北 101、桃園高鐵站"
+            placeholder={L("例如：台北 101、桃園高鐵站", "e.g. Taipei 101, HSR Taoyuan")}
             role="combobox"
             aria-expanded={open}
             aria-controls={listId}
@@ -90,7 +95,7 @@ export default function WorkplacePicker({
         </label>
       ) : (
         <label>
-          工作地
+          {L("工作地", "Workplace")}
           <select
             value={value?.presetId ?? ""}
             onChange={(e) => {
@@ -99,11 +104,11 @@ export default function WorkplacePicker({
             }}
           >
             <option value="" disabled>
-              請選擇
+              {L("請選擇", "Choose one")}
             </option>
             {presets.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.city}・{p.name}
+                {cityName(p.city, locale)}{L("・", " · ")}{pname(p)}
               </option>
             ))}
           </select>
@@ -122,25 +127,25 @@ export default function WorkplacePicker({
       )}
 
       {google && (
-        <div className="preset-row" aria-label="常見工作地">
+        <div className="preset-row" aria-label={L("常見工作地", "Common workplaces")}>
           {presets.slice(0, 8).map((p) => (
             <button
               type="button"
               key={p.id}
               className={value?.presetId === p.id ? "on" : ""}
               onClick={() => {
-                setQ(p.name);
+                setQ(pname(p));
                 onChange(presetToWorkplace(p));
               }}
             >
-              {p.name}
+              {pname(p)}
             </button>
           ))}
         </div>
       )}
       {google && value && (
         <div className="wp-current">
-          已選擇：<b>{value.label}</b>
+          {L("已選擇：", "Selected: ")}<b>{workplaceName(value, locale)}</b>
         </div>
       )}
       {error && <p className="form-error">{error}</p>}

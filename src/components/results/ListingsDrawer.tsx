@@ -3,13 +3,16 @@
 import { useEffect } from "react";
 import type { Scored } from "@/lib/scoring";
 import type { ListingView, SearchInput } from "@/lib/types";
+import { areaName } from "@/lib/constants";
+import { useL } from "../site/LocaleProvider";
 import ListingCard from "./ListingCard";
 
-const fmt = (n: number) => Math.round(n).toLocaleString("zh-TW");
+const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
 export default function ListingsDrawer({
   area, input, flex, listings, loading, error, onClose,
 }: { area: Scored | null; input: SearchInput; flex: number; listings: ListingView[]; loading: boolean; error: string; onClose: () => void }) {
+  const { L, locale } = useL();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -23,31 +26,31 @@ export default function ListingsDrawer({
   return (
     <>
       {open && <div className="drawer-backdrop" onClick={onClose} />}
-      <aside className={`drawer ${open ? "open" : ""}`} aria-hidden={!open} aria-label="區域房源">
+      <aside className={`drawer ${open ? "open" : ""}`} aria-hidden={!open} aria-label={L("區域房源", "Homes in this area")}>
         {area && s && (
           <>
             <div className="drawer-head">
-              <h2>{area.name}・房源</h2>
-              <button type="button" className="icon-btn" onClick={onClose} aria-label="關閉">
+              <h2>{L(`${area.name}・房源`, `Homes in ${areaName(area.pointId, area.name, locale)}`)}</h2>
+              <button type="button" className="icon-btn" onClick={onClose} aria-label={L("關閉", "Close")}>
                 ✕
               </button>
             </div>
 
             <div className="supply-box">
-              <div><small>該區行情</small><b>{fmt(s.market)}</b></div>
-              <div><small>預算內</small><b>{s.inBudget} 間</b></div>
-              {flex > 0 && <div><small>略超 ≤ {fmt(flex)}</small><b>{s.near} 間</b></div>}
-              <div><small>房源總數</small><b>{s.total} 間</b></div>
+              <div><small>{L("該區行情", "Typical rent")}</small><b>{fmt(s.market)}</b></div>
+              <div><small>{L("預算內", "In budget")}</small><b>{s.inBudget}</b></div>
+              {flex > 0 && <div><small>{L("略超", "Over")} ≤ {fmt(flex)}</small><b>{s.near}</b></div>}
+              <div><small>{L("房源總數", "All homes")}</small><b>{s.total}</b></div>
             </div>
             {s.pricey && (
               <p className="supply-note">
-                這區行情高於你們的預算，預算內的房子通常有些取捨，下方以橘色標出（例如屋齡較舊、坪數較小、離站較遠）。
+                {L("這區行情高於你們的預算，預算內的房子通常有些取捨，下方以橘色標出（例如屋齡較舊、坪數較小、離站較遠）。", "This area usually rents above your budget, so in-budget homes come with trade-offs, flagged in orange below (older, smaller or farther from the station).")}
               </p>
             )}
 
             <div className="drawer-tools">
-              <span>依你們的權重排序：預算內 → 略超預算 → 超出預算</span>
-              {source && <span className={`source-badge ${source === "google" ? "" : "est"}`}>{source === "google" ? "逐筆 Google 通勤" : "通勤為估算"}</span>}
+              <span>{L("依你們的權重排序：預算內 → 略超預算 → 超出預算", "Ranked by your weights: in budget → slightly over → over")}</span>
+              {source && <span className={`source-badge ${source === "google" ? "" : "est"}`}>{source === "google" ? L("逐筆 Google 通勤", "Google commute per home") : L("通勤為估算", "Estimated commutes")}</span>}
             </div>
 
             {loading && [0, 1, 2].map((i) => <div key={i} className="skeleton" />)}
@@ -55,9 +58,9 @@ export default function ListingsDrawer({
             {!loading && listings.map((l) => <ListingCard key={l.id} l={l} input={input} />)}
 
             <a className="primary-btn block" href="https://rent.591.com.tw/" target="_blank" rel="noopener noreferrer">
-              前往 591 搜尋「{area.name}」房源 ↗
+              {L(`前往 591 搜尋「${area.name}」房源 ↗`, `Search ${areaName(area.pointId, area.name, locale)} on 591 ↗`)}
             </a>
-            <p className="hint center">房源為模擬資料；正式版需與租屋平台合作取得。</p>
+            <p className="hint center">{L("房源為模擬資料；正式版需與租屋平台合作取得。", "Listings are simulated; a real version would partner with a rental platform.")}</p>
           </>
         )}
       </aside>

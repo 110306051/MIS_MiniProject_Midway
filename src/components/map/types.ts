@@ -13,5 +13,5 @@ export type MapProps = {
   mapId?: string;
 };
 
-export const COLOR_A = "#8246AF";
-export const COLOR_B = "#0070BD";
+export const COLOR_A = "#C17F7F";
+export const COLOR_B = "#7095AB";

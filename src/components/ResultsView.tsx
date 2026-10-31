@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AMENITIES, FLEX_OPTIONS, MODES, PRESETS, ROOM_TYPES } from "@/lib/constants";
+import { AMENITIES, FLEX_OPTIONS, MODES, PRESETS, ROOM_TYPES, areaName, listingTitle, workplaceName } from "@/lib/constants";
 import { evaluate, normalizeWeights, recommend } from "@/lib/scoring";
 import type { Features, ListingView, SearchRecord, VoteMap, Weights } from "@/lib/types";
 import MapView from "./map/MapView";
@@ -13,13 +13,16 @@ import HowItWorks from "./results/HowItWorks";
 import ListingsDrawer from "./results/ListingsDrawer";
 import ChatPanel from "./results/ChatPanel";
 import TopListings from "./results/TopListings";
+import { useL } from "./site/LocaleProvider";
 
 type Tab = "rec" | "listings" | "chat" | "all" | "how";
-const fmt = (n: number) => Math.round(n).toLocaleString("zh-TW");
+const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 
 export default function ResultsView({ search, initialVotes, features }: { search: SearchRecord; initialVotes: VoteMap; features: Features }) {
   const { input, metrics, id } = search;
   const [A, B] = input.people;
+  const { L, locale } = useL();
+  const an = (pid: string, name: string) => areaName(pid, name, locale);
 
   const [weights, setWeights] = useState<Weights>(search.weights);
   const [includeCost, setIncludeCost] = useState(search.includeCost);
@@ -36,7 +39,7 @@ export default function ResultsView({ search, initialVotes, features }: { search
   const [listError, setListError] = useState("");
 
   /* ---------- 計分（權重改變時在前端即時重算） ---------- */
-  const scored = useMemo(() => evaluate(metrics.areas, input, weights, includeCost, flex), [metrics, input, weights, includeCost, flex]);
+  const scored = useMemo(() => evaluate(metrics.areas, input, weights, includeCost, flex, locale), [metrics, input, weights, includeCost, flex, locale]);
   const picks = useMemo(() => recommend(scored), [scored]);
   const selectedId = selected && scored.some((s) => s.pointId === selected) ? selected : picks[0]?.pointId ?? null;
   const w = normalizeWeights(weights);
@@ -103,11 +106,12 @@ export default function ResultsView({ search, initialVotes, features }: { search
         if (!res.ok) throw new Error(json.error);
         setListings(json.listings);
       } catch (e) {
-        setListError((e as Error).message || "房源載入失敗");
+        setListError((e as Error).message || L("房源載入失敗", "Could not load homes"));
       } finally {
         setListLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [id, weights, includeCost, flex]
   );
   const closeDrawer = useCallback(() => {
@@ -125,9 +129,9 @@ export default function ResultsView({ search, initialVotes, features }: { search
   async function share() {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      setToast("已複製連結，傳給對方就能一起看、一起投票");
+      setToast(L("已複製連結，傳給對方就能一起看、一起投票", "Link copied — send it over to view and vote together"));
     } catch {
-      setToast("請手動複製網址列的連結");
+      setToast(L("請手動複製網址列的連結", "Copy the link from the address bar"));
     }
     setTimeout(() => setToast(""), 3000);
   }
@@ -136,23 +140,28 @@ export default function ResultsView({ search, initialVotes, features }: { search
   const mapWorkplaces = useMemo(
     () =>
       [
-        { id: "wa", name: A.workplace.label, label: A.name, lat: A.workplace.lat, lng: A.workplace.lng },
-        { id: "wb", name: B.workplace.label, label: B.name, lat: B.workplace.lat, lng: B.workplace.lng },
+        { id: "wa", name: workplaceName(A.workplace, locale), label: A.name, lat: A.workplace.lat, lng: A.workplace.lng },
+        { id: "wb", name: workplaceName(B.workplace, locale), label: B.name, lat: B.workplace.lat, lng: B.workplace.lng },
       ] as MapProps["workplaces"],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [input]
+    [input, locale]
   );
   const mapPicks = useMemo(
-    () => picks.map((p, i) => ({ id: p.pointId, name: p.name, lat: p.lat, lng: p.lng, rank: i + 1, tooltip: `${i + 1}. ${p.name}｜${A.name} ${p.commute[0].min} 分・${B.name} ${p.commute[1].min} 分` })),
-    [picks, A.name, B.name]
+    () => picks.map((p, i) => ({ id: p.pointId, name: an(p.pointId, p.name), lat: p.lat, lng: p.lng, rank: i + 1, tooltip: L(`${i + 1}. ${p.name}｜${A.name} ${p.commute[0].min} 分・${B.name} ${p.commute[1].min} 分`, `${i + 1}. ${an(p.pointId, p.name)} | ${A.name} ${p.commute[0].min} min, ${B.name} ${p.commute[1].min} min`) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [picks, A.name, B.name, locale]
   );
   const mapOthers = useMemo(() => {
     const ids = new Set(picks.map((p) => p.pointId));
-    return scored.filter((s) => !ids.has(s.pointId)).map((s) => ({ id: s.pointId, name: s.name, lat: s.lat, lng: s.lng, note: s.eligible ? "符合但未進前五" : s.reasons[0] }));
-  }, [scored, picks]);
+    return scored.filter((s) => !ids.has(s.pointId)).map((s) => ({ id: s.pointId, name: an(s.pointId, s.name), lat: s.lat, lng: s.lng, note: s.eligible ? L("符合但未進前五", "Fits, but not in the top 5") : s.reasons[0] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scored, picks, locale]);
   // 地圖上的房源點：打開區域時顯示該區房源；在「房源排行」分頁時顯示前 10 名
   const pinSource = drawerArea ? listings : tab === "listings" ? rankPins : [];
-  const mapListings = useMemo(() => pinSource.map((l, i) => ({ id: l.id, name: `${l.areaName}・${l.title}｜${fmt(l.rent)} 元`, lat: l.lat, lng: l.lng, top: i === 0 })), [pinSource]);
+  const mapListings = useMemo(() => pinSource.map((l, i) => ({ id: l.id, name: L(`${l.areaName}・${l.title}｜${fmt(l.rent)} 元`, `${listingTitle(l.title, l.pointId, "en")} | NT$${fmt(l.rent)}`), lat: l.lat, lng: l.lng, top: i === 0 })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pinSource, locale]
+  );
 
   // AI 顧問的建議問題：依這次的結果挑出最值得問的
   const suggestions = useMemo(() => {
@@ -160,15 +169,17 @@ export default function ResultsView({ search, initialVotes, features }: { search
     const commuteOk = (r: (typeof scored)[number]) => r.commute[0].min <= A.max && r.commute[1].min <= B.max;
     const blocked = scored.filter((r) => !r.eligible && commuteOk(r))[0];
     const pricey = picks.find((p) => p.supply.pricey);
-    if (blocked) out.push(`為什麼${blocked.name}沒有被推薦？`);
-    if (pricey) out.push(`${pricey.name}行情偏高，預算內的房子有什麼缺點？`);
-    if (picks[0]) out.push(`第一名${picks[0].name}對誰比較不公平？`);
-    out.push(flex < 3000 ? `如果我們願意多付 ${(flex + 2000).toLocaleString()} 元，會多出哪些選擇？` : "哪一區預算內的選擇最多？");
+    if (blocked) out.push(L(`為什麼${blocked.name}沒有被推薦？`, `Why isn't ${an(blocked.pointId, blocked.name)} recommended?`));
+    if (pricey) out.push(L(`${pricey.name}行情偏高，預算內的房子有什麼缺點？`, `${an(pricey.pointId, pricey.name)} is pricey — what's the catch with the in-budget homes?`));
+    if (picks[0]) out.push(L(`第一名${picks[0].name}對誰比較不公平？`, `Who gets the worse deal with #1 ${an(picks[0].pointId, picks[0].name)}?`));
+    const more = (flex + 2000).toLocaleString();
+    out.push(flex < 3000 ? L(`如果我們願意多付 ${more} 元，會多出哪些選擇？`, `What opens up if we pay NT$${more} more?`) : L("哪一區預算內的選擇最多？", "Which area has the most homes in budget?"));
     return out;
-  }, [scored, picks, flex, A.max, B.max]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scored, picks, flex, A.max, B.max, locale]);
 
-  const prefs = input.prefs.map((p) => AMENITIES.find((a) => a.id === p)?.name).join("、") || "未指定";
-  const modeName = (m: string) => MODES.find((x) => x.id === m)?.name;
+  const prefs = input.prefs.map((p) => AMENITIES.find((a) => a.id === p)?.[locale]).join(L("、", ", ")) || L("未指定", "None");
+  const modeName = (m: string) => MODES.find((x) => x.id === m)?.[locale];
   const drawerPick = drawerArea ? scored.find((s) => s.pointId === drawerArea) ?? null : null;
 
   return (
@@ -181,45 +192,46 @@ export default function ResultsView({ search, initialVotes, features }: { search
               <div>
                 <b>{p.name}</b>
                 <span>
-                  {p.workplace.label}・{modeName(p.mode)}・週 {p.days} 天・≤ {p.max} 分
+                  {L(`${p.workplace.label}・${modeName(p.mode)}・週 ${p.days} 天・≤ ${p.max} 分`, `${workplaceName(p.workplace, locale)} · ${modeName(p.mode)} · ${p.days} d/wk · ≤ ${p.max} min`)}
                 </span>
               </div>
             </div>
           ))}
           <div className="who-meta">
-            {ROOM_TYPES.find((r) => r.id === input.room)?.name}・預算 {fmt(input.budget)} 元・分攤 {input.splitA}/{100 - input.splitA}
+            {ROOM_TYPES.find((r) => r.id === input.room)?.[locale]}
+            {L(`・預算 ${fmt(input.budget)} 元・分攤 ${input.splitA}/${100 - input.splitA}`, ` · NT$${fmt(input.budget)} · split ${input.splitA}/${100 - input.splitA}`)}
             <br />
-            偏好：{prefs}
+            {L("偏好：", "Wants: ")}{prefs}
             <br />
-            通勤資料：
+            {L("通勤資料：", "Commute data: ")}
             <span className={`source-badge ${metrics.commuteSource === "estimate" ? "est" : ""}`}>
-              {metrics.commuteSource === "estimate" ? "估算模式" : metrics.commuteSource === "google" ? "Google 尖峰時段" : "Google＋估算"}
+              {metrics.commuteSource === "estimate" ? L("估算模式", "Estimated") : metrics.commuteSource === "google" ? L("Google 尖峰時段", "Google, rush hour") : L("Google＋估算", "Google + estimate")}
             </span>
           </div>
         </div>
         <Link className="ghost-btn center" href={`/search?from=${id}`}>
-          修改條件（建立新搜尋）
+          {L("修改條件（建立新搜尋）", "Edit conditions (new search)")}
         </Link>
 
         <div className="panel">
-          <h3>預算彈性</h3>
-          <p className="hint">預算 {fmt(input.budget)} 元。願意多付一點的話，略超預算的房源也會納入，並以橘色標示。</p>
-          <div className="seg-control" role="radiogroup" aria-label="預算彈性">
+          <h3>{L("預算彈性", "Budget flex")}</h3>
+          <p className="hint">{L(`預算 ${fmt(input.budget)} 元。願意多付一點的話，略超預算的房源也會納入，並以橘色標示。`, `Budget NT$${fmt(input.budget)}. Stretch a little and slightly-over homes are included, flagged in orange.`)}</p>
+          <div className="seg-control" role="radiogroup" aria-label={L("預算彈性", "Budget flex")}>
             {FLEX_OPTIONS.map((f) => (
               <button key={f} type="button" role="radio" aria-checked={flex === f} className={flex === f ? "on" : ""} onClick={() => setFlex(f)}>
-                {f ? `+${fmt(f)}` : "不超過"}
+                {f ? `+${fmt(f)}` : L("不超過", "None")}
               </button>
             ))}
           </div>
         </div>
 
         <div className="panel">
-          <h3>你們比較在乎什麼？</h3>
-          <p className="hint">拖動權重，推薦會即時重算，並同步給對方。</p>
+          <h3>{L("你們比較在乎什麼？", "What matters more?")}</h3>
+          <p className="hint">{L("拖動權重，推薦會即時重算，並同步給對方。", "Drag the weights — the ranking updates live and syncs to the other person.")}</p>
           <div className="presets">
             {PRESETS.map((p) => (
-              <button key={p.name} type="button" className={`preset ${WEIGHT_DEFS.every((d) => p.w[d.key] === weights[d.key]) ? "on" : ""}`} onClick={() => setWeights({ ...p.w })}>
-                {p.name}
+              <button key={p.zh} type="button" className={`preset ${WEIGHT_DEFS.every((d) => p.w[d.key] === weights[d.key]) ? "on" : ""}`} onClick={() => setWeights({ ...p.w })}>
+                {p[locale]}
               </button>
             ))}
           </div>
@@ -227,30 +239,30 @@ export default function ResultsView({ search, initialVotes, features }: { search
             <div className="weight" key={d.key}>
               <div className="weight-top">
                 <span className={`wdot w-${d.key}`} />
-                <b>{d.name}</b>
+                <b>{d[locale]}</b>
                 <output>{Math.round(w[d.key] * 100)}%</output>
               </div>
-              <input id={`w-${d.key}`} type="range" min={0} max={10} step={1} value={weights[d.key]} aria-label={`${d.name}權重`} onChange={(e) => setWeights((x) => ({ ...x, [d.key]: +e.target.value }))} />
-              <small>{d.desc}</small>
+              <input id={`w-${d.key}`} type="range" min={0} max={10} step={1} value={weights[d.key]} aria-label={L(`${d.zh}權重`, `${d.en} weight`)} onChange={(e) => setWeights((x) => ({ ...x, [d.key]: +e.target.value }))} />
+              <small>{locale === "en" ? d.descEn : d.desc}</small>
             </div>
           ))}
           <label className="check">
-            <input type="checkbox" checked={includeCost} onChange={(e) => setIncludeCost(e.target.checked)} /> 成本也計入每月交通費
+            <input type="checkbox" checked={includeCost} onChange={(e) => setIncludeCost(e.target.checked)} /> {L("成本也計入每月交通費", "Count monthly travel costs too")}
           </label>
         </div>
 
         <div className="panel">
-          <h3>一起決定</h3>
-          <p className="hint">選擇你是誰，就能替喜歡的地點按愛心。對方的投票每 5 秒同步。</p>
+          <h3>{L("一起決定", "Decide together")}</h3>
+          <p className="hint">{L("選擇你是誰，就能替喜歡的地點按愛心。對方的投票每 5 秒同步。", "Say who you are, then heart the places you like. The other person's votes sync every 5 seconds.")}</p>
           <div className="me-row">
             {input.people.map((p, i) => (
               <button key={i} type="button" className={me === i ? (i ? "on-b" : "on-a") : ""} onClick={() => chooseMe(i as 0 | 1)}>
-                我是{p.name}
+                {L(`我是${p.name}`, `I'm ${p.name}`)}
               </button>
             ))}
           </div>
           <button type="button" className="ghost-btn" style={{ width: "100%", marginTop: 10 }} onClick={share}>
-            複製分享連結
+            {L("複製分享連結", "Copy share link")}
           </button>
           <span className="toast" role="status">
             {toast}
@@ -277,21 +289,21 @@ export default function ResultsView({ search, initialVotes, features }: { search
             />
           </div>
           <div className="map-legend">
-            <span><i className="lg lg-a" /><b>{A.name}</b> 工作地</span>
-            <span><i className="lg lg-b" /><b>{B.name}</b> 工作地</span>
-            <span><i className="lg lg-pick" />推薦地點</span>
-            <span><i className="lg lg-out" />其他候選地點</span>
+            <span><i className="lg lg-a" /><b>{A.name}</b> {L("工作地", "works here")}</span>
+            <span><i className="lg lg-b" /><b>{B.name}</b> {L("工作地", "works here")}</span>
+            <span><i className="lg lg-pick" />{L("推薦地點", "Recommended")}</span>
+            <span><i className="lg lg-out" />{L("其他候選地點", "Other candidates")}</span>
           </div>
         </div>
 
         <nav className="tabs" role="tablist">
           {(
             [
-              ["rec", "推薦地區"],
-              ["listings", "房源排行"],
-              ["chat", "AI 顧問"],
-              ["all", "所有地區比較"],
-              ["how", "怎麼算的"],
+              ["rec", L("推薦地區", "Top areas")],
+              ["listings", L("房源排行", "Top homes")],
+              ["chat", L("AI 顧問", "AI advisor")],
+              ["all", L("所有地區比較", "All areas")],
+              ["how", L("怎麼算的", "How it works")],
             ] as [Tab, string][]
           ).map(([k, label]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
@@ -325,10 +337,10 @@ export default function ResultsView({ search, initialVotes, features }: { search
             </div>
           ) : (
             <div className="empty">
-              <h3>目前沒有地點同時符合兩人的通勤上限與預算</h3>
-              <p>試著把最長通勤時間放寬 10 分鐘、提高預算，或改選套房。「所有地點比較」可以看到每個地點被排除的原因。</p>
+              <h3>{L("目前沒有地點同時符合兩人的通勤上限與預算", "No area fits both commute limits and the budget")}</h3>
+              <p>{L("試著把最長通勤時間放寬 10 分鐘、提高預算，或改選套房。「所有地點比較」可以看到每個地點被排除的原因。", "Try allowing 10 more minutes, raising the budget, or a studio. All areas shows why each one was left out.")}</p>
               <button type="button" className="ghost-btn" onClick={() => setTab("all")}>
-                看所有地點
+                {L("看所有地點", "See all areas")}
               </button>
             </div>
           ))}

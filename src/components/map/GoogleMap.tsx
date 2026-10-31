@@ -3,10 +3,12 @@
 /** Google 地圖（金鑰：NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY） */
 import { AdvancedMarker, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { useEffect } from "react";
-import { COLOR_A, COLOR_B, type MapProps, type MapPoint } from "./types";
+import { type MapProps, type MapPoint } from "./types";
+import { useLineColors } from "./useLineColors";
 
 function Lines({ from, to }: { from: MapPoint | undefined; to: MapPoint[] }) {
   const map = useMap();
+  const [COLOR_A, COLOR_B] = useLineColors();
   useEffect(() => {
     if (!map || !from) return;
     const lines = to.map(
@@ -19,7 +21,7 @@ function Lines({ from, to }: { from: MapPoint | undefined; to: MapPoint[] }) {
         })
     );
     return () => lines.forEach((l) => l.setMap(null));
-  }, [map, from, to]);
+  }, [map, from, to, COLOR_A, COLOR_B]);
   return null;
 }
 
@@ -47,7 +49,7 @@ export default function GoogleMap({ workplaces, picks, others, listings, selecte
         <Lines from={sel} to={workplaces} />
 
         {others.map((o) => (
-          <AdvancedMarker key={o.id} position={o} title={`${o.name}：${o.note}`} onClick={() => onSelect(o.id)}>
+          <AdvancedMarker key={o.id} position={o} title={`${o.name} — ${o.note}`} onClick={() => onSelect(o.id)}>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#d9d4ca", border: "1px solid #9a9488" }} />
           </AdvancedMarker>
         ))}
@@ -65,7 +67,7 @@ export default function GoogleMap({ workplaces, picks, others, listings, selecte
         ))}
 
         {workplaces.map((w, i) => (
-          <AdvancedMarker key={w.id} position={w} title={`${w.label}的工作地：${w.name}`} zIndex={2000}>
+          <AdvancedMarker key={w.id} position={w} title={`${w.label} · ${w.name}`} zIndex={2000}>
             <div className={`wpin gm-wpin ${i ? "wpin-b" : "wpin-a"}`}>
               <span>{w.label}</span>
             </div>

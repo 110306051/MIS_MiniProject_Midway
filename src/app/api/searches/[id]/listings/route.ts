@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSearch, getTopListings, viewOptsFromUrl } from "@/lib/server/searches";
+import { getLocale } from "@/lib/server/locale";
 import { handle } from "../../../_lib";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -9,5 +10,5 @@ export const GET = handle(async (req: Request, { params }: Ctx) => {
   const { id } = await params;
   const search = await getSearch(id);
   if (!search) return NextResponse.json({ error: "找不到這個搜尋" }, { status: 404 });
-  return NextResponse.json(await getTopListings(search, viewOptsFromUrl(new URL(req.url), search)));
+  return NextResponse.json(await getTopListings(search, { ...viewOptsFromUrl(new URL(req.url), search), locale: await getLocale() }));
 });

@@ -8,6 +8,8 @@
 - **AI 說明**：Claude API（選用）
 - **登入系統**：Better Auth（Email + 密碼，密碼以 scrypt 雜湊儲存）
 
+**線上版本：** （部署後填入網址，例如 `https://midway.vercel.app`）
+
 > 沒有任何 API 金鑰也能完整執行：通勤時間改用估算模型，地圖改用開源的 OpenStreetMap 底圖，AI 說明改用規則模板。
 
 ---
@@ -56,48 +58,125 @@ npm run dev
 | `npm run db:seed` | 重新匯入模擬資料（不會刪除使用者的搜尋紀錄） |
 | `npm run db:studio` | 開啟網頁版資料庫瀏覽器 |
 | `npm run typecheck` | TypeScript 型別檢查 |
+| `npm run check:keys` | 逐一測試 `.env` 裡的資料庫與 API 金鑰是否可用 |
 
 ---
 
-## 2. API 金鑰放在哪裡
+## 2. API 金鑰：申請、填入、測試
 
-所有金鑰都放在**環境變數**：本機是專案根目錄的 `.env`，部署後是雲端平台的 Environment Variables 設定頁。**`.env` 已列在 `.gitignore`，絕對不要上傳到 GitHub。**
+所有金鑰都放在**環境變數**：本機是專案根目錄的 `.env`，部署後是 Vercel 的 Environment Variables。**`.env` 已列在 `.gitignore`，絕對不要上傳到 GitHub；`.env.example` 會上傳，裡面只能放空白或範例值。**
 
-| 變數 | 用途 | 會被瀏覽器看到嗎 | 沒填會怎樣 |
+| 變數 | 用途 | 必填？ | 會被瀏覽器看到嗎 | 沒填會怎樣 |
+| --- | --- | --- | --- | --- |
+| `DATABASE_URL` | 資料庫連線（Neon） | 必填 | 否 | 無法啟動 |
+| `BETTER_AUTH_SECRET` | 登入系統簽署 session 的密鑰 | 部署必填 | 否 | `npm run dev` 用內建開發金鑰；`npm start` 與正式網站登入會停用 |
+| `BETTER_AUTH_URL` | 網站網址 | 建議 | 否 | 本機預設 `http://localhost:3000`；Vercel 上自動用正式網域 |
+| `GOOGLE_MAPS_SERVER_KEY` | Routes API（通勤時間）、Places API (New)（地址搜尋） | 選填 | **否**，只在後端 | 工作地只能選常見地點，通勤用估算 |
+| `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Maps JavaScript API（Google 地圖） | 選填 | **是** | 改用 OpenStreetMap 地圖 |
+| `NEXT_PUBLIC_GOOGLE_MAP_ID` | 地圖 ID（自訂標記需要） | 選填 | 是 | 用 `DEMO_MAP_ID` |
+| `ANTHROPIC_API_KEY` | AI 取捨說明、AI 顧問對話 | 選填 | 否 | 規則模板，對話停用 |
+| `ANTHROPIC_MODEL` | Claude 模型 | 選填 | 否 | `claude-haiku-5-5` |
+
+### 填完之後怎麼測試
+
+```bash
+npm run check:keys
+```
+
+會對每個服務送一個最小的測試請求，逐項顯示 ✅／❌，失敗時會說明原因（API 沒啟用、金鑰限制勾錯、沒有額度……）。接著重新啟動 `npm run dev`，打開 `http://localhost:3000/api/health`：
+
+```json
+{ "database": "ok", "googleServer": true, "googleMap": true, "llm": true }
+```
+
+三個 `true` 分別代表 Google 後端、Google 地圖、Claude 已啟用。畫面上的變化：
+
+| 金鑰 | 畫面上的確認方式 |
+| --- | --- |
+| 伺服器金鑰 | 搜尋頁的工作地變成可以輸入任何地址；結果頁左側「通勤資料」顯示「Google 尖峰時段」 |
+| 瀏覽器金鑰 | 結果頁的地圖變成 Google 地圖（如果是灰色並寫「無法正確載入 Google 地圖」，看瀏覽器 Console 的錯誤碼） |
+| Claude | 地區卡片出現「用 AI 說明」按鈕；「AI 顧問」分頁可以輸入問題 |
+
+> 修改 `NEXT_PUBLIC_` 開頭的變數後，一定要重新啟動 `npm run dev`（部署則要 Redeploy），因為它們是在建置時寫進網頁的。
+
+---
+
+### A. 登入密鑰 `BETTER_AUTH_SECRET`（免申請，自己產生）
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+把輸出貼到 `.env` 的 `BETTER_AUTH_SECRET=`。本機和 Vercel **要用不同的兩組**。這串字等同網站的印章：外洩的話任何人都能偽造登入，必須換一組新的（換掉後所有人需要重新登入）。
+
+---
+
+### B. Google Maps Platform（三個 API、兩把金鑰）
+
+**費用**：Google 已改成「每個項目每月各有免費次數」（不再是每月 200 美元額度）。本專案用到的項目與免費次數：
+
+| 功能 | 計費項目 | 每月免費 | 超過後每 1,000 次 |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | 資料庫連線 | 否 | 無法啟動（必填） |
-| `GOOGLE_MAPS_SERVER_KEY` | Routes API（通勤時間）、Places API (New)（地址搜尋） | **否**，只在後端使用 | 工作地只能選常見地點，通勤改用估算 |
-| `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Maps JavaScript API（顯示 Google 地圖） | **是**（`NEXT_PUBLIC_` 開頭的變數會打包進網頁） | 改用 OpenStreetMap 地圖 |
-| `NEXT_PUBLIC_GOOGLE_MAP_ID` | Google 地圖樣式 ID（自訂標記需要） | 是 | 預設 `DEMO_MAP_ID`（僅供開發） |
-| `ANTHROPIC_API_KEY` | AI 取捨說明 | 否 | 使用規則模板 |
-| `ANTHROPIC_MODEL` | 使用的 Claude 模型 | 否 | 預設 `claude-haiku-5-5` |
-| `BETTER_AUTH_SECRET` | 登入系統的加密金鑰（簽署 session） | 否 | 本機使用內建的開發用金鑰；**部署前一定要設定** |
-| `BETTER_AUTH_URL` | 網站網址 | 否 | 預設 `http://localhost:3000`；部署後改成正式網址 |
+| 顯示地圖 | Dynamic Maps | 10,000 次載入 | US$7 |
+| 大眾運輸通勤時間 | Compute Route Matrix Essentials | 10,000 個 element | US$5 |
+| 開車（尖峰路況） | Compute Route Matrix Pro | 5,000 個 element | US$10 |
+| 機車 | Compute Route Matrix Enterprise（兩輪路線） | 較少 | 較貴 |
+| 地址自動完成 | Autocomplete Requests | 10,000 次 | US$2.83 |
+| 選定地址取座標 | Place Details Essentials | 10,000 次 | US$5 |
 
-程式中讀取金鑰的位置：
+**一次搜尋大約用掉**：33 個地區 × 2 人 = 66 個 element；打開一個地區看房源再多 40 個。同一個工作地 30 天內會用快取，不會重複計費。課堂展示用量遠低於免費額度，但仍要設定下面的**用量上限**，避免金鑰外洩被盜刷。
 
-- `src/lib/server/google.ts`：`GOOGLE_MAPS_SERVER_KEY`
-- `src/lib/server/llm.ts`：`ANTHROPIC_API_KEY`
-- `src/lib/server/features.ts`：決定哪些功能啟用，並把瀏覽器金鑰傳給前端
-- `src/components/map/GoogleMap.tsx`：使用瀏覽器金鑰顯示地圖
+**步驟：**
 
-> 修改 `NEXT_PUBLIC_` 開頭的變數後，必須重新啟動 `npm run dev` 或重新部署，因為它們是在建置時寫進網頁的。
+1. 到 [Google Cloud Console](https://console.cloud.google.com/) → 左上角選單「建立專案」（例如 `midway`）。
+2. **綁定帳單**：「帳單」→ 連結帳單帳戶（需要信用卡；在免費額度內不會扣款）。到「帳單 → 預算與快訊」建立 US$1 的預算警示，超過時會寄信給你。
+3. **啟用 API**：「API 和服務 → 程式庫」，分別搜尋並啟用：
+   - **Routes API**
+   - **Places API (New)**（注意是 New，不是舊版 Places API）
+   - **Maps JavaScript API**
+4. **建立伺服器金鑰**：「API 和服務 → 憑證 → 建立憑證 → API 金鑰」
+   - 名稱：`midway-server`
+   - 應用程式限制：**無**（Vercel 的伺服器 IP 不固定，所以不設；它不會出現在網頁上）
+   - API 限制：**限制金鑰** → 只勾 `Routes API`、`Places API (New)`
+   - 填入 `.env` 的 `GOOGLE_MAPS_SERVER_KEY`
+5. **建立瀏覽器金鑰**：同樣建立一把
+   - 名稱：`midway-browser`
+   - 應用程式限制：**網站** → 加入 `http://localhost:3000/*` 和 `https://你的網址.vercel.app/*`
+   - API 限制：只勾 `Maps JavaScript API`
+   - 填入 `.env` 的 `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`
+6. **設定每日用量上限（建議）**：「API 和服務 → 已啟用的 API」→ 點 Routes API → 「配額與系統限制」→ 把每日 element 數改小（例如每天 2,000）。Places API (New) 同樣設定。
+7. （選用）**地圖 ID**：「Google Maps Platform → 地圖管理 → 建立地圖 ID」，類型選 JavaScript、向量，填入 `NEXT_PUBLIC_GOOGLE_MAP_ID`。不填會用 `DEMO_MAP_ID`，開發時沒問題。
+8. 執行 `npm run check:keys`，Routes API 與 Places API 應該都是 ✅。剛啟用的 API 可能要等幾分鐘才生效。
 
-### 申請 Google Maps 金鑰
+**常見錯誤**
 
-1. 到 [Google Cloud Console](https://console.cloud.google.com/) 建立專案，並綁定帳單帳戶（每個 API 每月有免費額度，課堂使用通常不會超過；建議設定**預算警示**）。
-2. 在「API 和服務 → 程式庫」啟用：**Maps JavaScript API**、**Routes API**、**Places API (New)**。
-3. 在「憑證」建立**兩把**金鑰：
-   - **伺服器金鑰** → `GOOGLE_MAPS_SERVER_KEY`
-     - API 限制：只勾 Routes API、Places API (New)
-   - **瀏覽器金鑰** → `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`
-     - 應用程式限制：網站（HTTP 參照網址），加入 `http://localhost:3000/*` 和部署後的網址，例如 `https://你的專案.vercel.app/*`
-     - API 限制：只勾 Maps JavaScript API
-4. （選用）在「Google Maps Platform → 地圖管理」建立 Map ID，填入 `NEXT_PUBLIC_GOOGLE_MAP_ID`。
+| 訊息 | 原因 |
+| --- | --- |
+| `SERVICE_DISABLED` / has not been used | API 沒啟用，或剛啟用還沒生效 |
+| `API_KEY_SERVICE_BLOCKED` | 金鑰的「API 限制」沒勾到這個 API |
+| `BILLING_NOT_ENABLED` | 專案沒有綁定帳單 |
+| 地圖顯示 `RefererNotAllowedMapError` | 瀏覽器金鑰的網站限制沒有加入目前的網址 |
+| 地圖顯示 `ApiNotActivatedMapError` | Maps JavaScript API 沒啟用 |
 
-### 申請 Claude API 金鑰（選用）
+---
 
-到 [Claude Console](https://console.anthropic.com/) 建立 API key，填入 `ANTHROPIC_API_KEY`。結果頁每張卡片會出現「用 AI 說明」按鈕。
+### C. Claude API（AI 說明與 AI 顧問）
+
+1. 到 [Claude Console](https://console.anthropic.com/) 註冊並登入。
+2. **Billing**：儲值（API 是預付制，最低金額依頁面顯示）。在 **Limits** 設定每月花費上限，例如 US$5。
+3. **API Keys → Create Key**，名稱 `midway`，複製 `sk-ant-...` 開頭的字串（只會顯示一次）。
+4. 填入 `.env` 的 `ANTHROPIC_API_KEY`，`ANTHROPIC_MODEL` 保持 `claude-haiku-5-5`。
+5. 執行 `npm run check:keys`，應該看到模型回覆「OK」。
+
+**費用**：Claude Haiku 5.5 每百萬 token 輸入 US$0.10、輸出 US$0.50（單次提示在 10 萬 token 以內）。一次 AI 說明或對話約 3,000～8,000 token，等於不到 0.1 元台幣。
+
+---
+
+### D. 部署到 Vercel 時
+
+到 Vercel 專案的 **Settings → Environment Variables**，把上面用到的變數逐一加入（`BETTER_AUTH_SECRET` 用另一組新的），再到 **Deployments → Redeploy**。別忘了把正式網址加進 Google 瀏覽器金鑰的網站限制。
+
+程式中讀取金鑰的位置：`src/lib/server/google.ts`（Google 後端）、`src/lib/server/llm.ts`（Claude）、`src/lib/server/auth.ts`（登入）、`src/lib/server/features.ts`（決定哪些功能啟用，並把瀏覽器金鑰傳給前端）。
 
 ---
 
@@ -183,11 +262,57 @@ src/
 
 ---
 
-## 5. 視覺設計
+## 5. 視覺設計與多語系
 
-設計概念是「捷運路線圖」：兩個人是兩條路線，第一個人用機場捷運紫（`#8246AF`）、第二個人用板南線藍（`#0070BD`），推薦的中間點是環狀線黃色（`#F5C400`）的車站。
+設計概念是「通勤路線圖」：兩個人是兩條路線，推薦的中間點是兩線交會的車站。首頁主視覺與行動區使用該配色最深的顏色，內容區使用淺色，形成深淺節奏。
 
-- 字型：Chiron Hei HK（依香港街道與車站招牌設計的黑體），數字為等寬排列。
-- 推薦地區沿著一條路線排列，第 1 名是黃色車站。
-- 首頁的路線圖動畫只播放一次；系統開啟「減少動態」時不播放。
-- 所有顏色變數集中在 `src/app/globals.css` 開頭的 `:root`。
+- **風格切換**：每頁右下角的「風格」按鈕可切換 7 組配色與 8 組中英文字體，選擇存在 cookie。配色與字體定義在 `src/lib/themes.ts`，所有元件只使用 `src/app/globals.css` 開頭 `:root` 的 CSS 變數，因此新增一組配色只要在 `THEMES` 加一筆。
+- **中英文切換**：導覽列的「中／EN」。介面文字寫在元件裡（`L("中文", "English")`），地名、工作地、房源標題在 `src/lib/constants.ts` 轉換；伺服器產生的文字（評分理由、AI 說明）依 cookie 決定語言。
+- **動畫**：首頁路線圖會輪播三組情境，捲動時各區塊依序出現；系統開啟「減少動態」時全部改為靜態。
+
+---
+
+## 6. 部署（Vercel + Neon）
+
+| 元件 | 平台 | 說明 |
+| --- | --- | --- |
+| 網站（前端＋後端 API） | [Vercel](https://vercel.com) | Next.js 官方平台，連結 GitHub 後每次 push 自動部署 |
+| 資料庫 | [Neon](https://neon.tech) | 雲端 PostgreSQL；本機開發與正式網站可共用同一個資料庫 |
+
+### 第一次部署
+
+1. **本機先確認能建置**：`npm run build` 沒有錯誤。
+2. **推到 GitHub**：確認 `.env` 沒有被加入（`git status` 裡不應該出現 `.env`）。
+3. **Vercel → Add New → Project → Import** 這個 GitHub repo。Framework 會自動辨識為 Next.js；如果 repo 根目錄不是 `midway-app`，要把 **Root Directory** 設成 `midway-app`。
+4. **設定 Environment Variables**（Production）：
+
+   | 變數 | 值 |
+   | --- | --- |
+   | `DATABASE_URL` | Neon 的連線字串（建議用含 `-pooler` 的版本） |
+   | `BETTER_AUTH_SECRET` | 隨機字串：`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+   | `BETTER_AUTH_URL` | 正式網址，例如 `https://midway.vercel.app`（沒填時會自動使用 Vercel 的正式網域） |
+
+5. **Deploy**，完成後打開 `https://你的網址/api/health`，應該看到 `"database":"ok"`。
+6. 實際註冊一個帳號、建立一次搜尋，確認流程正常。
+
+資料表與模擬資料是用本機的 `npm run setup` 建立在 Neon 上，Vercel 部署時不會自動執行。之後修改 `schema.ts` 時，要在本機執行 `npm run db:push` 同步到資料庫。
+
+### 之後加入金鑰
+
+在 Vercel 的 **Settings → Environment Variables** 新增變數，然後到 **Deployments** 對最新版本按 **Redeploy**。`NEXT_PUBLIC_` 開頭的變數一定要重新部署才會生效。
+
+- Google 地圖瀏覽器金鑰：記得把正式網址加進金鑰的「HTTP 參照網址」限制。
+- 部署後的網址改變時，也要更新 `BETTER_AUTH_URL`。
+
+---
+
+## 7. AI 工具使用說明（課程要求）
+
+本專案在以下環節使用 AI 輔助，並由組員檢查與修正：
+
+| 環節 | AI 協助的內容 | 我們的判斷與修改 |
+| --- | --- | --- |
+| 競品研究 | 搜尋國內外租屋平台的多人通勤功能 | （填寫：例如確認台灣主流平台都沒有此功能） |
+| 商業模式 | 撰寫 VPC、BMC 草稿 | （填寫） |
+| 演算法 | 提出加權評分公式 | 發現「只看平均房價會排除行情偏高的地區」，改成看預算內的房源數量 |
+| 程式與設計 | 產生原型與正式專案程式碼、視覺設計 | （填寫） |

@@ -37,7 +37,7 @@ export function estimateCommute(origin: Place, dest: Place, mode: Mode, days: nu
   let via: string;
   if (shared.length) {
     min = 13 + km * 1.2;
-    via = `${LINES[shared[0]] ?? shared[0]}直達`;
+    via = `${LINES[shared[0]]?.zh ?? shared[0]}直達`;
   } else {
     const bus = oLines.length === 0 || dLines.length === 0 ? 12 : 0;
     min = 13 + km * 1.25 + 10 + bus;

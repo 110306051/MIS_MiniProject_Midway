@@ -5,7 +5,8 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useEffect, useMemo } from "react";
 import { CircleMarker, MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
-import { COLOR_A, COLOR_B, type MapProps } from "./types";
+import { type MapProps } from "./types";
+import { useLineColors } from "./useLineColors";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -20,6 +21,7 @@ function FitBounds({ pts }: { pts: [number, number][] }) {
 }
 
 export default function LeafletMap({ workplaces, picks, others, listings, selectedId, onSelect, focusListings }: MapProps) {
+  const [COLOR_A, COLOR_B] = useLineColors();
   const sel = picks.find((p) => p.id === selectedId) ?? others.find((p) => p.id === selectedId);
   const bounds = useMemo<[number, number][]>(
     () => (focusListings && listings.length ? listings.map((l) => [l.lat, l.lng]) : [...workplaces, ...picks].map((p) => [p.lat, p.lng])),
@@ -38,7 +40,7 @@ export default function LeafletMap({ workplaces, picks, others, listings, select
 
       {others.map((o) => (
         <CircleMarker key={o.id} center={[o.lat, o.lng]} radius={5} pathOptions={{ color: "#9a9488", weight: 1, fillColor: "#d9d4ca", fillOpacity: 0.9 }} eventHandlers={{ click: () => onSelect(o.id) }}>
-          <Tooltip>{`${o.name}：${o.note}`}</Tooltip>
+          <Tooltip>{`${o.name} — ${o.note}`}</Tooltip>
         </CircleMarker>
       ))}
 
@@ -67,7 +69,7 @@ export default function LeafletMap({ workplaces, picks, others, listings, select
 
       {workplaces.map((w, i) => (
         <Marker key={w.id} position={[w.lat, w.lng]} zIndexOffset={2000} icon={L.divIcon({ className: "", html: `<div class="wpin ${i ? "wpin-b" : "wpin-a"}"><span>${esc(w.label)}</span></div>`, iconSize: [0, 0] })}>
-          <Tooltip>{`${w.label}的工作地：${w.name}`}</Tooltip>
+          <Tooltip>{`${w.label} · ${w.name}`}</Tooltip>
         </Marker>
       ))}
     </MapContainer>

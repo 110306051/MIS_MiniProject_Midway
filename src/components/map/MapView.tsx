@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import type { MapProps } from "./types";
 
 // 地圖套件只能在瀏覽器執行，所以關閉伺服器端渲染
-const Loading = () => <div className="map-off">地圖載入中…</div>;
+const Loading = () => <div className="map-off" aria-busy="true" />;
 const GoogleMap = dynamic(() => import("./GoogleMap"), { ssr: false, loading: Loading });
 const LeafletMap = dynamic(() => import("./LeafletMap"), { ssr: false, loading: Loading });
 

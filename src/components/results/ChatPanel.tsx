@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Weights } from "@/lib/types";
+import { useL } from "../site/LocaleProvider";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -9,6 +10,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 export default function ChatPanel({
   searchId, weights, includeCost, flex, llm, suggestions,
 }: { searchId: string; weights: Weights; includeCost: boolean; flex: number; llm: boolean; suggestions: string[] }) {
+  const { L, locale } = useL();
   const [insights, setInsights] = useState<string[] | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
@@ -27,9 +29,12 @@ export default function ChatPanel({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchId, weights, includeCost, flex]);
+  }, [searchId, weights, includeCost, flex, locale]);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), [messages, busy]);
+  // 用大括號包起來：新版瀏覽器的 scrollIntoView 會回傳 Promise，直接回傳會讓 React 報錯
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [messages, busy]);
 
   async function send(q: string) {
     const content = q.trim();
@@ -45,7 +50,7 @@ export default function ChatPanel({
       if (!res.ok) throw new Error(json.error);
       setMessages([...next, { role: "assistant", content: json.reply }]);
     } catch (e) {
-      setError((e as Error).message || "AI 暫時無法回覆");
+      setError((e as Error).message || L("AI 暫時無法回覆", "The AI couldn't reply"));
       setMessages(messages); // 送出失敗就把問題放回輸入框
       setText(content);
     } finally {
@@ -57,8 +62,8 @@ export default function ChatPanel({
     <div className="chat">
       <div className="chat-insights">
         <div className="ai-head">
-          <span className="ai-badge">重點整理</span>
-          <small>依目前的權重與預算彈性即時計算</small>
+          <span className="ai-badge">{L("重點整理", "Key points")}</span>
+          <small>{L("依目前的權重與預算彈性即時計算", "Worked out live from your weights and budget flex")}</small>
         </div>
         {insights === null ? (
           <div className="skeleton" />
@@ -73,20 +78,21 @@ export default function ChatPanel({
 
       {!llm && (
         <p className="mode-note">
-          AI 對話需要在 <code>.env</code> 設定 <code>ANTHROPIC_API_KEY</code>。設定後重新啟動，就能直接問「為什麼南港沒被推薦？」這類問題。
+          {L("AI 對話需要在 ", "AI chat needs ")}<code>ANTHROPIC_API_KEY</code>{L(" 設定在 ", " set in ")}<code>.env</code>
+          {L("。設定後重新啟動，就能直接問「為什麼南港沒被推薦？」這類問題。", ". Restart after setting it and you can ask things like “Why isn’t Nangang recommended?”")}
         </p>
       )}
 
       {llm && (
         <>
           <div className="chat-log">
-            {messages.length === 0 && <p className="hint">可以問任何關於這次推薦的問題，AI 只會根據你們的條件與資料回答。</p>}
+            {messages.length === 0 && <p className="hint">{L("可以問任何關於這次推薦的問題，AI 只會根據你們的條件與資料回答。", "Ask anything about these results. The AI only answers from your conditions and the data.")}</p>}
             {messages.map((m, i) => (
               <div key={i} className={`bubble ${m.role}`}>
                 {m.content}
               </div>
             ))}
-            {busy && <div className="bubble assistant typing">AI 思考中…</div>}
+            {busy && <div className="bubble assistant typing">{L("AI 思考中…", "Thinking…")}</div>}
             <div ref={endRef} />
           </div>
           <div className="chat-suggest">
@@ -104,9 +110,9 @@ export default function ChatPanel({
               send(text);
             }}
           >
-            <input value={text} onChange={(e) => setText(e.target.value)} placeholder="例如：如果我們願意多付 2,000，會多出哪些選擇？" maxLength={500} aria-label="問 AI 顧問" />
+            <input value={text} onChange={(e) => setText(e.target.value)} placeholder={L("例如：如果我們願意多付 2,000，會多出哪些選擇？", "e.g. What opens up if we pay NT$2,000 more?")} maxLength={500} aria-label={L("問 AI 顧問", "Ask the AI advisor")} />
             <button type="submit" className="primary-btn sm" disabled={busy || !text.trim()}>
-              送出
+              {L("送出", "Send")}
             </button>
           </form>
         </>

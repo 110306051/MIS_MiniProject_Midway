@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { aiChat, hasLLM, ruleInsights } from "@/lib/server/llm";
 import { getSearch, weightsSchema } from "@/lib/server/searches";
+import { getLocale } from "@/lib/server/locale";
 import { handle } from "../../../_lib";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -18,17 +19,18 @@ const bodySchema = weightsSchema.extend({
 export const POST = handle(async (req: Request, { params }: Ctx) => {
   const { id } = await params;
   const search = await getSearch(id);
-  if (!search) return NextResponse.json({ error: "找不到這個搜尋" }, { status: 404 });
+  if (!search) return NextResponse.json({ error: "找不到這個搜尋 / Search not found" }, { status: 404 });
   const { messages, weights, includeCost, budgetFlex } = bodySchema.parse(await req.json());
-  const o = { weights, includeCost, budgetFlex: budgetFlex ?? search.budgetFlex };
+  const o = { weights, includeCost, budgetFlex: budgetFlex ?? search.budgetFlex, locale: await getLocale() };
+  const en = o.locale === "en";
 
   if (!messages.length) return NextResponse.json({ insights: ruleInsights(search, o), llm: hasLLM() });
-  if (!hasLLM()) return NextResponse.json({ error: "尚未設定 ANTHROPIC_API_KEY，AI 對話無法使用" }, { status: 501 });
-  if (messages.at(-1)?.role !== "user") return NextResponse.json({ error: "最後一則必須是使用者訊息" }, { status: 400 });
+  if (!hasLLM()) return NextResponse.json({ error: en ? "AI chat is off: ANTHROPIC_API_KEY is not set" : "尚未設定 ANTHROPIC_API_KEY，AI 對話無法使用" }, { status: 501 });
+  if (messages.at(-1)?.role !== "user") return NextResponse.json({ error: en ? "The last message must be from the user" : "最後一則必須是使用者訊息" }, { status: 400 });
   try {
     return NextResponse.json({ reply: await aiChat(search, o, messages) });
   } catch (e) {
     console.error("[chat]", e);
-    return NextResponse.json({ error: "AI 暫時無法回覆，請稍後再試" }, { status: 502 });
+    return NextResponse.json({ error: en ? "The AI could not reply. Please try again." : "AI 暫時無法回覆，請稍後再試" }, { status: 502 });
   }
 });

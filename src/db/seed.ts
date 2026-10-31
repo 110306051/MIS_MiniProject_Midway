@@ -89,7 +89,7 @@ async function main() {
         return {
           id: `${p.id}-${room.id}-${i + 1}`,
           pointId: p.id,
-          title: `${area}${street}・${b.kind}${room.name}`,
+          title: `${area}${street}・${b.kind}${room.zh}`,
           address: `${p.city}${area}${street}${between(1, 300)}號附近`,
           lat, lng,
           roomType: room.id,

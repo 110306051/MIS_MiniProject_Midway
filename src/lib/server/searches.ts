@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, lte } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { amenityScores, candidatePoints, listings, rentStats, searches, votes, workplacePresets } from "@/db/schema";
-import { AMENITIES, DEFAULT_WEIGHTS, FLEX_OPTIONS, type RoomType } from "../constants";
+import { AMENITIES, DEFAULT_WEIGHTS, FLEX_OPTIONS, type Locale, type RoomType } from "../constants";
 import { inferLines } from "../estimate";
 import { evaluate, listingTradeoffs, scoreOne } from "../scoring";
 import type { AreaMetric, Commute, ListingView, Metrics, SearchInput, SearchRecord, VoteMap, Weights } from "../types";
@@ -152,7 +152,7 @@ export async function setVote(id: string, raw: unknown) {
 
 /* ---------- 第二階段：房源層級 ---------- */
 
-export type ViewOpts = { weights: Weights; includeCost: boolean; budgetFlex: number };
+export type ViewOpts = { weights: Weights; includeCost: boolean; budgetFlex: number; locale?: Locale };
 
 type ListingRow = typeof listings.$inferSelect;
 
@@ -164,7 +164,7 @@ function toView(l: ListingRow, area: AreaMetric, commute: [Commute, Commute], se
   amen[petIdx] = l.features.includes("可養寵物") ? 1 : amen[petIdx] * 0.5;
   const s = scoreOne({ rent: l.rent, amen, commute }, input, o.weights, o.includeCost, Infinity);
   const overBy = Math.max(0, l.rent - input.budget);
-  const { vsMarketPct, tradeoffs } = listingTradeoffs(l, area.market ?? area.rent, input.room as RoomType);
+  const { vsMarketPct, tradeoffs } = listingTradeoffs(l, area.market ?? area.rent, input.room as RoomType, o.locale);
   return {
     id: l.id, pointId: l.pointId, areaName: area.name, title: l.title, address: l.address, lat: l.lat, lng: l.lng,
     rent: l.rent, ping: l.ping, floor: l.floor, walkMin: l.walkMin, age: l.age, elevator: l.elevator, features: l.features,
